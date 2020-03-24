@@ -55,7 +55,7 @@ static inline unsigned long ulong_sqrt(unsigned long in)
   return out;
 }
 
-void J1772EVSEController::readAmmeter()
+void J1772EVSEController::readAmmeter(uint8_t phase)
 {
   WDT_RESET();
 
@@ -65,7 +65,14 @@ void J1772EVSEController::readAmmeter()
   long last_sample = -1; // should be impossible - the A/d is 0 to 1023.
   unsigned int sample_count = 0;
   for(unsigned long start = millis(); ((now_ms = millis()) - start) < CURRENT_SAMPLE_INTERVAL; ) {
+    #if defined (REAL_THREEPHASE)
+    long sample;
+    if (phase == 1) { sample = (long) adcCurrent.read(); }
+    if (phase == 2) { sample = (long) adcCurrent_L2.read(); }
+    if (phase == 3) { sample = (long) adcCurrent_L3.read(); }
+    #else
     long sample = (long) adcCurrent.read();
+    #endif // REAL_THREEPHASE
     // If this isn't the first sample, and if the sign of the value differs from the
     // sign of the previous value, then count that as a zero crossing.
     if (last_sample != -1 && ((last_sample > 512) != (sample > 512))) {
@@ -91,12 +98,25 @@ void J1772EVSEController::readAmmeter()
       // The answer is the square root of the mean of the squares.
       // But additionally, that value must be scaled to a real current value.
       // we will do that elsewhere
+      #if defined (REAL_THREEPHASE)
+      if (phase == 1) { m_AmmeterReading[1] = ulong_sqrt(sum / sample_count); }
+      if (phase == 2) { m_AmmeterReading[2] = ulong_sqrt(sum / sample_count); }
+      if (phase == 3) { m_AmmeterReading[3] = ulong_sqrt(sum / sample_count); }
+      #else
       m_AmmeterReading = ulong_sqrt(sum / sample_count);
+      #endif // REAL_THREEPHASE
       return;
     }
   }
   // ran out of time. Assume that it's simply not oscillating any. 
+  
+  #if defined (REAL_THREEPHASE)
+  if (phase == 1) { m_AmmeterReading[1] = 0; }
+  if (phase == 2) { m_AmmeterReading[2] = 0; }
+  if (phase == 3) { m_AmmeterReading[3] = 0; }
+  #else
   m_AmmeterReading = 0;
+  #endif // REAL_THREEPHASE
 
   WDT_RESET();
 }
@@ -146,6 +166,12 @@ J1772EVSEController::J1772EVSEController() :
   adcPilot(PILOT_PIN)
 #ifdef CURRENT_PIN
   , adcCurrent(CURRENT_PIN)
+#endif
+#ifdef CURRENT_PIN_L2
+  , adcCurrent_L2(CURRENT_PIN_L2)
+#endif
+#ifdef CURRENT_PIN_L3
+  , adcCurrent_L3(CURRENT_PIN_L3)
 #endif
 #ifdef VOLTMETER_PIN
   , adcVoltMeter(VOLTMETER_PIN)
@@ -321,7 +347,13 @@ void J1772EVSEController::chargingOff()
   m_ChargeOffTimeMS = millis();
 
 #ifdef AMMETER
+#if defined (REAL_THREEPHASE)
+  m_ChargingCurrent[1] = 0;
+  m_ChargingCurrent[2] = 0;
+  m_ChargingCurrent[3] = 0;
+#else
   m_ChargingCurrent = 0;
+#endif // REAL_THREEPHASE
 #endif
 } 
 
@@ -958,8 +990,17 @@ void J1772EVSEController::Init()
     m_CurrentScaleFactor = DEFAULT_CURRENT_SCALE_FACTOR;
   }
   
+#if defined (REAL_THREEPHASE)
+  m_AmmeterReading[1] = 0;
+  m_AmmeterReading[2] = 0;
+  m_AmmeterReading[3] = 0;
+  m_ChargingCurrent[1] = 0;
+  m_ChargingCurrent[2] = 0;
+  m_ChargingCurrent[3] = 0;
+#else  
   m_AmmeterReading = 0;
   m_ChargingCurrent = 0;
+#endif // REAL_THREEPHASE
 #ifdef OVERCURRENT_THRESHOLD
   m_OverCurrentStartMs = 0;
 #endif //OVERCURRENT_THRESHOLD
@@ -1138,13 +1179,29 @@ void J1772EVSEController::Update(uint8_t forcetransition)
       // c) no current draw means EV opened its contacts even if it stays in STATE C
       //    allow 3A slop for ammeter inaccuracy
 #ifdef AMMETER
-      readAmmeter();
+      readAmmeter(1);
+#if defined (REAL_THREEPHASE)
+      readAmmeter(2);
+      readAmmeter(3);
+      long instantma[3];
+      instantma[1] = m_AmmeterReading[1]*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+      instantma[2] = m_AmmeterReading[1]*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+      instantma[3] = m_AmmeterReading[1]*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
+      if (instantma[1] < 0) instantma[1] = 0;
+      if (instantma[2] < 0) instantma[2] = 0;
+      if (instantma[3] < 0) instantma[3] = 0;
+#else
       long instantma = m_AmmeterReading*m_CurrentScaleFactor - m_AmmeterCurrentOffset;
       if (instantma < 0) instantma = 0;
+#endif // REAL_THREEPHASE
 #endif // AMMETER
       if ((phigh >= m_ThreshData.m_ThreshBC)
 #ifdef AMMETER
+#if defined (REAL_THREEPHASE)
+   || (instantma[1] <= 1000L) || (instantma[2] <= 1000L) || (instantma[3] <= 1000L)
+#else
 	 || (instantma <= 1000L)
+#endif // REAL_THREEPHASE
 #endif // AMMETER
 	  || ((curms - m_ChargeOffTimeMS) >= 3000UL)) {
 #ifdef FT_SLEEP_DELAY
@@ -1676,7 +1733,8 @@ if (TempChkEnabled()) {
   if (((m_EvseState == EVSE_STATE_C) && (m_CurrentScaleFactor > 0)) || AmmeterCalEnabled()) {
     
 #ifndef FAKE_CHARGING_CURRENT
-    readAmmeter();
+    readAmmeter(1);
+#if not defined (REAL_THREEPHASE)
     uint32_t ma = MovingAverage(m_AmmeterReading);
     if (ma != 0xffffffff) {
       m_ChargingCurrent = ma * m_CurrentScaleFactor - m_AmmeterCurrentOffset;  // subtract it
@@ -1685,13 +1743,45 @@ if (TempChkEnabled()) {
       }
       g_OBD.SetAmmeterDirty(1);
     }
+#else
+    uint32_t ma = MovingAverage(m_AmmeterReading[1]);
+    if (ma != 0xffffffff) {
+      m_ChargingCurrent[1] = ma * m_CurrentScaleFactor - m_AmmeterCurrentOffset;  // subtract it
+      if (m_ChargingCurrent[1] < 0) {
+  m_ChargingCurrent[1] = 0;
+      }
+    }
+    readAmmeter(2);
+    uint32_t ma_L2 = MovingAverage(m_AmmeterReading[2]);
+    if (ma_L2 != 0xffffffff) {
+      m_ChargingCurrent[2] = ma_L2 * m_CurrentScaleFactor - m_AmmeterCurrentOffset;  // subtract it
+      if (m_ChargingCurrent[2] < 0) {
+  m_ChargingCurrent[2] = 0;
+      }
+    }
+    readAmmeter(3);
+    uint32_t ma_L3 = MovingAverage(m_AmmeterReading[3]);
+    if (ma_L3 != 0xffffffff) {
+      m_ChargingCurrent[3] = ma_L3 * m_CurrentScaleFactor - m_AmmeterCurrentOffset;  // subtract it
+      if (m_ChargingCurrent[3] < 0) {
+  m_ChargingCurrent[3] = 0;
+      }
+    }
+    g_OBD.SetAmmeterDirty(1);
+#endif // !REAL_THREEPHASE
 #endif // !FAKE_CHARGING_CURRENT
   }
 
 #ifdef OVERCURRENT_THRESHOLD
   if (m_EvseState == EVSE_STATE_C) {
     //testing    m_ChargingCurrent = (m_CurrentCapacity+OVERCURRENT_THRESHOLD+12)*1000L;
+#if defined (REAL_THREEPHASE)
+    if ((m_ChargingCurrent[1] >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L)) ||
+        (m_ChargingCurrent[2] >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L)) ||
+        (m_ChargingCurrent[3] >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L))) {
+#else
     if (m_ChargingCurrent >= ((m_CurrentCapacity+OVERCURRENT_THRESHOLD)*1000L)) {
+#endif // REAL_THREEPHASE
       if (m_OverCurrentStartMs) { // already in overcurrent state
 	if ((millis()-m_OverCurrentStartMs) >= OVERCURRENT_TIMEOUT) {
 	  //

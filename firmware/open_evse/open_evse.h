@@ -70,6 +70,9 @@
 // Note: three-phase energy will always be calculated even if EV is only using singe-phase. Ony enable if always charging 3-phase EV and aware of this limitation.
 //#define THREEPHASE
 
+// Enable real three-phase current measurements ( 3 current measurements coils are needed )
+//#define REAL_THREEPHASE
+
 // charging access control - if defined, enables RAPI G4/S4 commands
 //  to enable/disable charging function
 // if AUTH_LOCK_REG/IDX are also defined (see below), then a hardware pin is
@@ -464,6 +467,11 @@ extern AutoCurrentCapacityController g_ACCController;
 
 #if defined(ATMEGA328P)
 #define CURRENT_PIN 0 // analog current reading pin ADCx
+#if defined(REAL_THREEPHASE)
+// We're using the two last unused analog pin on the atmeag328p (only available on the QFP version)
+#define CURRENT_PIN_L2 6 // analog current reading pin ADCx
+#define CURRENT_PIN_L3 7 // analog current reading pin ADCx
+#endif // REAL_THREEPHASE
 #define PILOT_PIN 1 // analog pilot voltage reading pin ADCx
 #define PP_PIN 2 // PP_READ - ADC2
 #ifdef VOLTMETER
@@ -474,6 +482,10 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // ATMEGA328P
 #if defined(ATMEGA644P)
 #define CURRENT_PIN 26 // analog current reading pin ADCx
+#if defined(REAL_THREEPHASE)
+#define CURRENT_PIN_L2 27 // analog current reading pin ADCx
+#define CURRENT_PIN_L3 28 // analog current reading pin ADCx
+#endif // REAL_THREEPHASE
 #define PILOT_PIN 24 // analog pilot voltage reading pin ADCx
 #define PP_PIN 25 // PP_READ - ADC2
 #ifdef VOLTMETER

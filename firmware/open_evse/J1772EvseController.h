@@ -120,6 +120,12 @@ class J1772EVSEController {
 #ifdef CURRENT_PIN
   AdcPin adcCurrent;
 #endif
+#ifdef CURRENT_PIN_L2
+  AdcPin adcCurrent_L2;
+#endif
+#ifdef CURRENT_PIN_L3
+  AdcPin adcCurrent_L3;
+#endif
 #ifdef VOLTMETER_PIN
   AdcPin adcVoltMeter;
 #endif
@@ -228,8 +234,13 @@ class J1772EVSEController {
 #endif
 
 #ifdef AMMETER
+#ifdef REAL_THREEPHASE
+  unsigned long m_AmmeterReading[3];
+  int32_t m_ChargingCurrent[3];
+#else
   unsigned long m_AmmeterReading;
   int32_t m_ChargingCurrent;
+#endif // REAL_THREEPHASE
   int16_t m_AmmeterCurrentOffset;
   int16_t m_CurrentScaleFactor;
 #ifdef CHARGE_LIMIT
@@ -237,7 +248,7 @@ class J1772EVSEController {
   uint32_t m_chargeLimitTotWs; // total Ws limit
 #endif
 
-  void readAmmeter();
+  void readAmmeter(uint8_t phase);
 #endif // AMMETER
 #ifdef VOLTMETER
   uint16_t m_VoltScaleFactor;
@@ -422,7 +433,11 @@ int GetHearbeatTrigger();
 #ifdef OCPPDBG
     return 78*1000;
 #else
+#if defined (REAL_THREEPHASE)
+    return m_ChargingCurrent[1];
+#else
     return m_ChargingCurrent;
+#endif // REAL_THREEPHASE
 #endif // OCPPDBG
   }
 #ifdef FAKE_CHARGING_CURRENT
@@ -449,10 +464,22 @@ int GetHearbeatTrigger();
     if (tf) setVFlags(ECVF_AMMETER_CAL);
     else clrVFlags(ECVF_AMMETER_CAL);
   }
+#if defined (REAL_THREEPHASE)
+  void ZeroChargingCurrent() {
+    m_ChargingCurrent[1] = 0;
+    m_ChargingCurrent[2] = 0;
+    m_ChargingCurrent[3] = 0;
+    }
+#else
   void ZeroChargingCurrent() { m_ChargingCurrent = 0; }
+#endif // REAL_THREEPHASE
   uint8_t GetInstantaneousChargingAmps() {
-    readAmmeter();
+    readAmmeter(1);
+    #if defined (REAL_THREEPHASE)
+    return m_AmmeterReading[1] / 1000;
+    #else
     return m_AmmeterReading / 1000;
+    #endif // REAL_THREEPHASE
   }
 #ifdef CHARGE_LIMIT
   void ClrChargeLimit() { m_chargeLimitTotWs = 0; m_chargeLimitkWh = 0; }
