@@ -157,6 +157,34 @@ void EvseRapiProcessor::sendEvseState()
   writeEnd();
 }
 
+#if defined (REAL_THREEPHASE)
+void EvseRapiProcessor::sendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3)
+{
+#ifdef RAPI_RESPONSE_CHK
+  sprintf(g_sTmp,"%cAA %lu %lu %lu",ESRAPI_SOC,current,current_L2,current_L3);
+  appendChk(g_sTmp);
+#else
+  sprintf(g_sTmp,"%cAA %lu %lu %lu %c",ESRAPI_SOC,current,current_L2,current_L3,ESRAPI_EOC);
+#endif //RAPI_RESPONSE_CHK
+  writeStart();
+  write(g_sTmp);
+  writeEnd();
+}
+#else
+void EvseRapiProcessor::sendCurrent(uint32_t current)
+{
+#ifdef RAPI_RESPONSE_CHK
+  sprintf(g_sTmp,"%cAA %lu",ESRAPI_SOC,current);
+  appendChk(g_sTmp);
+#else
+  sprintf(g_sTmp,"%cAA %lu%c",ESRAPI_SOC,current,ESRAPI_EOC);
+#endif //RAPI_RESPONSE_CHK
+  writeStart();
+  write(g_sTmp);
+  writeEnd();
+}
+#endif // REAL_THREEPHASE
+
 #ifdef RAPI_WF
 void EvseRapiProcessor::setWifiMode(uint8_t mode)
 {
@@ -997,6 +1025,29 @@ void RapiSendEvseState(uint8_t nodupe)
     evseStateSent = es;
   }
 }
+
+#if defined (REAL_THREEPHASE)
+void RapiSendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3)
+{
+#ifdef RAPI_SERIAL
+  g_ESRP.sendCurrent(current, current_L2, current_L3);
+#endif
+#ifdef RAPI_I2C
+  g_EIRP.sendCurrent(current, current_L2, current_L3);
+#endif
+}
+#else
+void RapiSendCurrent(uint32_t current)
+{
+#ifdef RAPI_SERIAL
+  g_ESRP.sendCurrent(current);
+#endif
+#ifdef RAPI_I2C
+  g_EIRP.sendCurrent(current);
+#endif
+}
+#endif // REAL_THREEPHASE
+
 
 void RapiSendBootNotification()
 {

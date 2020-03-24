@@ -73,6 +73,9 @@
 // Enable real three-phase current measurements ( 3 current measurements coils are needed )
 //#define REAL_THREEPHASE
 
+// Define, in mA, the minimum current measurement difference between two measurements which will trigger an asynchronous RAPI publish event.
+#define AMMETER_CHANGE_PUBLISH 500
+
 // charging access control - if defined, enables RAPI G4/S4 commands
 //  to enable/disable charging function
 // if AUTH_LOCK_REG/IDX are also defined (see below), then a hardware pin is

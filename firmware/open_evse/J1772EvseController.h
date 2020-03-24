@@ -237,9 +237,11 @@ class J1772EVSEController {
 #ifdef REAL_THREEPHASE
   unsigned long m_AmmeterReading[3];
   int32_t m_ChargingCurrent[3];
+  int32_t p_m_ChargingCurrent[3];
 #else
   unsigned long m_AmmeterReading;
   int32_t m_ChargingCurrent;
+  int32_t p_m_ChargingCurrent;
 #endif // REAL_THREEPHASE
   int16_t m_AmmeterCurrentOffset;
   int16_t m_CurrentScaleFactor;

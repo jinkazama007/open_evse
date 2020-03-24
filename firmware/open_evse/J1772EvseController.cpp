@@ -1769,6 +1769,19 @@ if (TempChkEnabled()) {
     }
     g_OBD.SetAmmeterDirty(1);
 #endif // !REAL_THREEPHASE
+#ifdef RAPI
+#if defined (REAL_THREEPHASE)
+    if (((m_ChargingCurrent[1] - p_m_ChargingCurrent[1]) < AMMETER_CHANGE_PUBLISH) ||
+        ((m_ChargingCurrent[2] - p_m_ChargingCurrent[2]) < AMMETER_CHANGE_PUBLISH) ||
+        ((m_ChargingCurrent[3] - p_m_ChargingCurrent[3]) < AMMETER_CHANGE_PUBLISH)) {
+          RapiSendCurrent(m_ChargingCurrent[1], m_ChargingCurrent[2], m_ChargingCurrent[3]);
+        }
+#else
+        if ((m_ChargingCurrent - p_m_ChargingCurrent) < AMMETER_CHANGE_PUBLISH) {
+          RapiSendCurrent(m_ChargingCurrent);
+        }
+#endif // REAL_THREE_PHASE
+#endif // RAPI 
 #endif // !FAKE_CHARGING_CURRENT
   }
 
