@@ -658,7 +658,22 @@ uint8_t J1772EVSEController::ReadACPins()
     if (ac2 && !pinAC2.read()) {
       ac2 = 0;
     }
-  } while ((ac1 || ac2) && ((millis() - startms) < AC_SAMPLE_MS));
+  }
+  #if defined (REAL_THREEPHASE) || (THREEPHASE)
+  while ((ac1 && ac2) &&
+  // The original code (below) did not work properly when
+  // we try to sample 3 phases systems (ac1=L1 and ac2=L2 or
+  // L3). The phases are 120 degrees out of phase and if
+  // we stop sampling when we get 1 phase detected we might
+  // incorrectly detect the supply as L1 (single phase) 
+  // instead of L2 (because at the moment it is detected the
+  // other phase might be around 0 volts. Here we either wait
+  // for both ac1 and ac2 to be detected or wait the full 
+  // AC_SAMPLE_MS timeout.
+  #else
+  while ((ac1 || ac2) &&
+  #endif // REAL_THREEPHASE || THREEPHASE
+  ((millis() - startms) < AC_SAMPLE_MS));
   return ac1 | ac2;
 #else // !SAMPLE_ACPINS
   return (pinAC1.read() ? 2 : 0) | (pinAC2.read() ? 1 : 0);
