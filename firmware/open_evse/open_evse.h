@@ -76,6 +76,46 @@
 // Define, in mA, the minimum current measurement difference between two measurements which will trigger an asynchronous RAPI publish event.
 #define AMMETER_CHANGE_PUBLISH 500
 
+// Teleinfo support ( used by French utility energy meters )
+// Allows automatic dynamic configuration of the maximum charge current
+//#define TELEINFO
+
+#if defined TELEINFO
+// Either historique or standard mode
+// 0 = historique
+// 1 = standard
+#define TELEINFO_MODE 0
+
+// Either hard (2nd serial port), soft or altsoft
+// 0 = HardSerial (Serial1)
+// 1 = SoftSerial (SSerial)
+// 2 = AltSoftSerial (SSerial)
+#define TELEINFO_SERIAL 2
+
+// Dynamically adjust current capacity based on teleinfo and ammeter
+#define TELEINFO_OFFLOAD
+
+// Disable charging when in Day Rate
+// Disable mode:
+// 0 = Sleep mode (can be easily be overriden (by pressing the EVSE
+// button or through the network interface)
+// 1 = Disable mode
+#define TELEINFO_NIGHTRATE 0
+
+#if defined (TELEINFO_MODE) && (TELEINFO_MODE > 0)
+#define TELEINFO_RATE 9600
+#else
+#define TELEINFO_RATE 1200
+#endif // TELEINFO_MODE
+
+#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1)
+#define TELEINFO_SERIAL_PIN 23
+#endif // TELEINFO_SERIAL
+#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
+#define Wiring-S
+#endif // TELEINFO_SERIAL
+#endif // TELEINFO
+
 // charging access control - if defined, enables RAPI G4/S4 commands
 //  to enable/disable charging function
 // if AUTH_LOCK_REG/IDX are also defined (see below), then a hardware pin is

@@ -48,7 +48,10 @@
 #include <pins_arduino.h>
 #include "./Wire.h"
 #include "./RTClib.h"
+#include "LibTeleinfo.h"
 #include "open_evse.h"
+#include "ReceiveOnlySoftwareSerial.h"
+#include "ReceiveOnlyAltSoftSerial.h"
 
 // if using I2CLCD_PCF8574 uncomment below line  and comment out LiquidTWI2.h above
 //#include "./LiquidCrystal_I2C.h"
@@ -2459,6 +2462,72 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 }
 #endif //PP_AUTO_AMPACITY
 
+#if defined (TELEINFO)
+  TInfo tinfo;
+  
+  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1)
+    ReceiveOnlySoftwareSerial SSerial(TELEINFO_SERIAL_PIN);
+  #endif
+  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
+    ReceiveOnlyAltSoftSerial SSerial;
+  #endif
+
+  int8_t TinfoSubCurrent = -1;
+  int8_t TinfoInstCurrent1 = -1;
+  #if defined (THREEPHASE) || (REAL_THREEPHASE)
+  int8_t TinfoInstCurrent2 = -1;
+  int8_t TinfoInstCurrent3 = -1;
+  #endif // THREEPHASE || REAL_THREEPHASE
+  int8_t TinfoRate = -1;
+  int8_t p_TinfoRate = -1;
+
+  void TeleinfoDataCallback(ValueList * me, uint8_t flags)
+  {
+    if ((flags & TINFO_FLAGS_ADDED) || (flags & TINFO_FLAGS_UPDATED)) {
+      // Maximum current of the actual subscribed plan
+      if (strcmp(me->name,"ISOUSC") == 0) { TinfoSubCurrent = sscanf(me->value, "%d", &TinfoSubCurrent); }
+      #if defined (THREEPHASE) || (REAL_THREEPHASE)
+        // Actual measured current if three phase
+        if (strcmp(me->name,"IINST1") == 0) { TinfoInstCurrent1 = sscanf(me->value, "%d", &TinfoInstCurrent1); }
+        if (strcmp(me->name,"IINST2") == 0) { TinfoInstCurrent2 = sscanf(me->value, "%d", &TinfoInstCurrent2); }
+        if (strcmp(me->name,"IINST3") == 0) { TinfoInstCurrent3 = sscanf(me->value, "%d", &TinfoInstCurrent3); }
+      #else
+        // Actual measured current if single phase
+        if (strcmp(me->name,"IINST") == 0) { TinfoInstCurrent1 = sscanf(me->value, "%d", &TinfoInstCurrent1); }
+      #endif // THREEPHASE || REAL_THREEPHASE
+      // Actual plan price option
+      if (strcmp(me->name,"PTEC") == 0) {
+        p_TinfoRate = TinfoRate;
+        // TH=No option, HC = Night Rate, HN = EJP normal day
+        if ((strcmp(me->value,"TH.." )) || (strcmp(me->value,"HC.." )) || (strcmp(me->value,"HN.." ))) { TinfoRate = 1; }
+        // HP = Day Rate, PM = EJP rush day
+        if ((strcmp(me->value,"HP.." ) == 0) || (strcmp(me->value,"PM.." ))) { TinfoRate = 2; }
+        #if defined (TELEINFO_NIGHTRATE)
+          // Disable/Enable charging if we switch to day rate/night rate.
+          // (Do this only once makes it possible to force Charging/Sleeping with a single press of the button..).
+          if ((TinfoRate == 2) && (p_TinfoRate != 2))
+          if (TELEINFO_NIGHTRATE > 0)
+            g_EvseController.Disable();
+          else
+            g_EvseController.Sleep();
+          if ((TinfoRate == 1) && (p_TinfoRate != 1))
+            g_EvseController.Enable();
+        #endif
+        }
+      #if defined (TELEINFO_OFFLOAD)
+        // Calculate and apply max charging current based on measured currents in meter and evse.
+        if (( TinfoSubCurrent >= 0 ) && ( TinfoInstCurrent1 >= 0 )) {
+          #if defined (THREEPHASE) || (REAL_THREEPHASE)
+            uint8_t ChargingCurrent = (TinfoSubCurrent - max(max(TinfoInstCurrent1, TinfoInstCurrent2), TinfoInstCurrent3) - (g_EvseController.GetChargingCurrent() / 1000));
+          #else
+            uint8_t ChargingCurrent = (TinfoSubCurrent - TinfoInstCurrent1 - (g_EvseController.GetChargingCurrent() / 1000));
+          #endif // THREEPHASE || REAL_THREEPHASE
+          g_EvseController.SetCurrentCapacity(ChargingCurrent,1,1);
+      #endif
+      }
+    }
+  }
+#endif // TELEINFO
 
 void setup()
 {
@@ -2481,6 +2550,16 @@ void setup()
 #ifdef TEMPERATURE_MONITORING
   g_TempMonitor.Init();
 #endif
+
+#if defined (TELEINFO)
+  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 0)
+    Serial1.begin(TELEINFO_RATE);
+  #elif defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL >= 1)
+    SSerial.begin(TELEINFO_RATE);
+  #endif
+  tinfo.init();
+  tinfo.attachData(TeleinfoDataCallback);
+#endif // TELEINFO
 
   WDT_ENABLE();
 }  // setup()
@@ -2517,4 +2596,12 @@ void loop()
 #ifdef DELAYTIMER
   g_DelayTimer.CheckTime();
 #endif //#ifdef DELAYTIMER
+
+#if defined TELEINFO
+  #if defined TELEINFO_SERIAL && (TELEINFO_SERIAL == 0)
+    if ( Serial1.available() ) { tinfo.process(Serial1.read()); }
+  #elif defined TELEINFO_SERIAL && (TELEINFO_SERIAL >= 1)
+    if ( SSerial.available() ) { tinfo.process(SSerial.read()); }
+  #endif // TELEINFO_SERIAL
+#endif // TELEINFO
 }
