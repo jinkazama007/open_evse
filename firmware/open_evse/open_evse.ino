@@ -365,6 +365,9 @@ OnboardDisplay::OnboardDisplay()
   : m_Lcd(LCD_I2C_ADDR,1)
 #endif // I2CLCD_PCF8574
 #endif // defined(I2CLCD) || defined(RGBLCD)
+#ifdef I2COLED
+  : m_Lcd(SSD_I2C_ADDR)
+#endif
 {
 }
 
@@ -405,11 +408,13 @@ const char CustomChar_5[8] PROGMEM = { // time limit clock
 #endif // TIME_LIMIT
 
 #ifdef LCD16X2
+#ifndef I2COLED
 void OnboardDisplay::MakeChar(uint8_t n, PGM_P bytes)
 {
   memcpy_P(g_sTmp, bytes, 8);
   m_Lcd.createChar(n, (uint8_t*)g_sTmp);
 }
+#endif // I2COLED
 #endif // LCD16X2
 
 void OnboardDisplay::Init()
@@ -435,6 +440,7 @@ void OnboardDisplay::Init()
   LcdBegin(LCD_MAX_CHARS_PER_LINE, 2);
   LcdSetBacklightColor(WHITE);
 
+#ifndef I2COLED
 #if defined(DELAYTIMER)
   MakeChar(0,CustomChar_0);
 #endif
@@ -451,6 +457,7 @@ void OnboardDisplay::Init()
 #ifdef TIME_LIMIT
   MakeChar(5,CustomChar_5);
 #endif // TIME_LIMIT
+#endif // I2COLED
   m_Lcd.clear();
 
 #ifdef OPENEVSE_2

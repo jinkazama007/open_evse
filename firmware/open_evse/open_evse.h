@@ -280,6 +280,12 @@ extern AutoCurrentCapacityController g_ACCController;
 #undef RGBLCD
 #endif // I2CLCD_PCF8574
 
+// SSD1306 OLED Display in I2C mode
+#define I2COLED
+#ifdef I2COLED
+#undef RGBLCD
+#endif
+
 // Advanced Powersupply... Ground check, stuck relay, L1/L2 detection.
 #define ADVPWR
 
@@ -400,12 +406,12 @@ extern AutoCurrentCapacityController g_ACCController;
 #define DEFAULT_LCD_BKL_TYPE BKL_TYPE_MONO
 #endif
 
-#if defined(RGBLCD) || defined(I2CLCD)
+#if defined(RGBLCD) || defined(I2CLCD) || defined(I2COLED)
 #define LCD16X2
 //If LCD is not defined, undef BTN_MENU - requires LCD
 #else
 #undef BTN_MENU
-#endif // RGBLCD || I2CLCD
+#endif // RGBLCD || I2CLCD || I2COLED
 
 //If LCD and RTC is defined, un-define CLI so we can save ram space.
 #if defined(SERIALCLI) && defined(DELAYTIMER_MENU)
@@ -769,6 +775,11 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // I2CLCD_PCF8574
 #endif // RGBLCD || I2CLCD
 
+#if defined(I2COLED)
+#include "SSD1306I2C1602.h"
+#define SSD_I2C_ADDR 0x3C
+#endif
+
 // button sensing pin
 #if defined(ATMEGA328P)
 #define BTN_REG &PINC
@@ -980,6 +991,9 @@ class OnboardDisplay
   LiquidTWI2 m_Lcd;
 #endif // I2CLCD_PCF8574
 #endif // defined(RGBLCD) || defined(I2CLCD)
+#if defined(I2COLED)
+  SSD1306I2C1602 m_Lcd;
+#endif
   uint8_t m_bFlags;
   char m_strBuf[LCD_MAX_CHARS_PER_LINE+1];
   unsigned long m_LastUpdateMs;
@@ -1015,6 +1029,9 @@ public:
     m_Lcd.begin(x,y,2);
     m_Lcd.setBacklight(WHITE);
 #endif // I2CLCD
+#ifdef I2COLED
+    m_Lcd.begin(x,y);
+#endif
   }
   void LcdPrint(const char *s) {
     m_Lcd.print(s);
