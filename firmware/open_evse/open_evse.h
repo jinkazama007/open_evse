@@ -23,9 +23,6 @@
 
 #define OPEN_EVSE
 
-//#define ATMEGA328P
-#define ATMEGA644P
-
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
@@ -112,7 +109,7 @@
 #define TELEINFO_SERIAL_PIN 23
 #endif // TELEINFO_SERIAL
 #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
-#define Wiring-S
+#define WIRING
 #endif // TELEINFO_SERIAL
 #endif // TELEINFO
 
@@ -193,30 +190,30 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // If you loop a wire from the third GFI pin through the CT a few times and then to ground,
 // enable this. ADVPWR must also be defined.
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define GFI_SELFTEST
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 // Board does not have internal GFI hardware, it can't test this functionality!
 // (GFI hardware was removed as it can't detect DC current leak which is now a requirement
 // in EU which means an external device is needed anyway...)
 //#define GFI_SELFTEST
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 // behavior specified by UL
 // 1) if enabled, POST failure will cause a hard fault until power cycled.
 //    disabled, will retry POST continuously until it passes
 // 2) if enabled, any a fault occurs immediately after charge is initiated,
 //    hard fault until power cycled. Otherwise, do the standard delay/retry sequence
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define UL_COMPLIANT
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 // Board does not have internal GFI hardware, it can't test this functionality!
 // (GFI hardware was removed as it can't detect DC current leak which is now a requirement
 // in EU which means an external device is needed anyway...)
 //#define UL_COMPLIANT
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #ifdef UL_COMPLIANT
 #define ADVPWR
@@ -362,14 +359,14 @@ extern AutoCurrentCapacityController g_ACCController;
 // manual function calls
 // digital pin is configured as input with internal pull-up enabled
 // EVSE is locked when input HIGH and unlocked when input LOW
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 //#define AUTH_LOCK_REG &PINC
 //#define AUTH_LOCK_IDX 2
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 //#define SLEEP_STATUS_REG &PINB
 //#define SLEEP_STATUS_IDX 4
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #endif // AUTH_LOCK
 
@@ -390,12 +387,12 @@ extern AutoCurrentCapacityController g_ACCController;
 // switch to m_relayHoldPwm
 // ONLY WORKS PWM-CAPABLE PINS!!!
 // use Arduino pin number PD5 = 5, PD6 = 6 (for ATMEGA328)
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 //#define RELAY_AUTO_PWM_PIN 5
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 //#define RELAY_AUTO_PWM_PIN 5
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 // enables RAPI $Z0 for tuning PWM (see rapi_proc.h for $Z0 syntax)
 // PWM parameters written to/loaded from EEPROM
 // when done tuning, put hardcoded parameters into m_relayCloseMs
@@ -520,7 +517,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 //J1772EVSEController
 
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define CURRENT_PIN 0 // analog current reading pin ADCx
 #if defined(REAL_THREEPHASE)
 // We're using the two last unused analog pin on the atmeag328p (only available on the QFP version)
@@ -534,8 +531,8 @@ extern AutoCurrentCapacityController g_ACCController;
 // voltmeter pin is ADC2 on OPENEVSE_2
 #define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
 #endif // VOLTMETER
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define CURRENT_PIN 26 // analog current reading pin ADCx
 #if defined(REAL_THREEPHASE)
 #define CURRENT_PIN_L2 27 // analog current reading pin ADCx
@@ -548,7 +545,7 @@ extern AutoCurrentCapacityController g_ACCController;
 // voltmeter pin is ADC2 on OPENEVSE_2
 #define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
 #endif // VOLTMETER
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 #ifdef OPENEVSE_2
 // This pin must match the last write to CHARGING_PIN, modulo a delay. If
 // it is low when CHARGING_PIN is high, that's a missing ground.
@@ -562,23 +559,23 @@ extern AutoCurrentCapacityController g_ACCController;
 #else // !OPENEVSE_2
 
  // TEST PIN 1 for L1/L2, ground and stuck relay
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define ACLINE1_REG &PIND
 #define ACLINE1_IDX 3
  // TEST PIN 2 for L1/L2, ground and stuck relay
 #define ACLINE2_REG &PIND
 #define ACLINE2_IDX 4
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define ACLINE1_REG &PINC
 #define ACLINE1_IDX 3
  // TEST PIN 2 for L1/L2, ground and stuck relay
 #define ACLINE2_REG &PINC
 #define ACLINE2_IDX 4
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #ifndef RELAY_AUTO_PWM_PIN
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 // digital Relay trigger pin
 #define CHARGING_REG &PINB
 #define CHARGING_IDX 0
@@ -588,12 +585,12 @@ extern AutoCurrentCapacityController g_ACCController;
 //digital Charging pin for AC relay
 #define CHARGINGAC_REG &PINB
 #define CHARGINGAC_IDX 1
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 // digital Relay trigger pin
 #define CHARGING_REG &PINB
 #define CHARGING_IDX 0
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 #endif // !RELAY_AUTO_PWM_PIN
 
 // obsolete LED pin
@@ -606,21 +603,21 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // N.B. if PAFC_PWM is enabled, then pilot pin can be PB1 or PB2
 // if using fast PWM (PAFC_PWM disabled) pilot pin *MUST* be PB2
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define PILOT_REG &PINB
 #define PILOT_IDX 2
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define PILOT_REG &PIND
 #define PILOT_IDX 4
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #ifdef MENNEKES_LOCK
 // requires external 12V H-bridge driver such as Polulu 1451
 #define MENNEKES_LOCK_STATE EVSE_STATE_B // lock in State B
 //#define MENNEKES_LOCK_STATE EVSE_STATE_C // lock in State C
 
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 //D11 - MOSI
 #define MENNEKES_LOCK_PINA_REG &PINB
 #define MENNEKES_LOCK_PINA_IDX 3
@@ -628,14 +625,14 @@ extern AutoCurrentCapacityController g_ACCController;
 //D12 - MISO
 #define MENNEKES_LOCK_PINB_REG &PINB
 #define MENNEKES_LOCK_PINB_IDX 4
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define MENNEKES_LOCK_PINA_REG &PINB
 #define MENNEKES_LOCK_PINA_IDX 3
 
 #define MENNEKES_LOCK_PINB_REG &PINB
 #define MENNEKES_LOCK_PINB_IDX 4
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 #include "MennekesLock.h"
 #endif // MENNEKES_LOCK
 
@@ -716,27 +713,27 @@ extern AutoCurrentCapacityController g_ACCController;
 #define AC_SAMPLE_MS 20 // 1 cycle @ 60Hz = 16.6667ms @ 50Hz = 20ms
 
 #ifdef GFI
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
 #define GFI_REG &PIND
 #define GFI_IDX 2
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define GFI_INTERRUPT 2 // interrupt number 0 = PD2, 1 = PD3, 2 = PB2
 #define GFI_REG &PINB
 #define GFI_IDX 2
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #ifdef GFI_SELFTEST
 // pin is supposed to be wrapped around the GFI CT 5+ times
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define GFITEST_REG &PIND
 #define GFITEST_IDX 6
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define GFITEST_REG &PINC
 #define GFITEST_IDX 6
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 
 #define GFI_TEST_CYCLES 60
 // GFI pulse should be 50% duty cycle
@@ -787,14 +784,14 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif
 
 // button sensing pin
-#if defined(ATMEGA328P)
+#if defined(__AVR_ATmega328P__)
 #define BTN_REG &PINC
 #define BTN_IDX 3
-#endif // ATMEGA328P
-#if defined(ATMEGA644P)
+#endif // __AVR_ATmega328P__
+#if defined(__AVR_ATmega644P__)
 #define BTN_REG &PINC
 #define BTN_IDX 5
-#endif // ATMEGA644P
+#endif // __AVR_ATmega644P__
 #define BTN_PRESS_SHORT 50  // ms
 #define BTN_PRESS_LONG 500 // ms
 #define BTN_PRESS_VERYLONG 10000
