@@ -2481,7 +2481,7 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 
   int8_t TinfoSubCurrent = -1;
   int8_t TinfoInstCurrent1 = -1;
-  #if defined (THREEPHASE) || (REAL_THREEPHASE)
+  #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
   int8_t TinfoInstCurrent2 = -1;
   int8_t TinfoInstCurrent3 = -1;
   #endif // THREEPHASE || REAL_THREEPHASE
@@ -2493,7 +2493,7 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
     if ((flags & TINFO_FLAGS_ADDED) || (flags & TINFO_FLAGS_UPDATED)) {
       // Maximum current of the actual subscribed plan
       if (strcmp(me->name,"ISOUSC") == 0) { TinfoSubCurrent = sscanf(me->value, "%d", &TinfoSubCurrent); }
-      #if defined (THREEPHASE) || (REAL_THREEPHASE)
+      #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
         // Actual measured current if three phase
         if (strcmp(me->name,"IINST1") == 0) { TinfoInstCurrent1 = sscanf(me->value, "%d", &TinfoInstCurrent1); }
         if (strcmp(me->name,"IINST2") == 0) { TinfoInstCurrent2 = sscanf(me->value, "%d", &TinfoInstCurrent2); }
@@ -2524,7 +2524,7 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
       #if defined (TELEINFO_OFFLOAD)
         // Calculate and apply max charging current based on measured currents in meter and evse.
         if (( TinfoSubCurrent >= 0 ) && ( TinfoInstCurrent1 >= 0 )) {
-          #if defined (THREEPHASE) || (REAL_THREEPHASE)
+          #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
             uint8_t ChargingCurrent = (TinfoSubCurrent - max(max(TinfoInstCurrent1, TinfoInstCurrent2), TinfoInstCurrent3) - (g_EvseController.GetChargingCurrent() / 1000));
           #else
             uint8_t ChargingCurrent = (TinfoSubCurrent - TinfoInstCurrent1 - (g_EvseController.GetChargingCurrent() / 1000));

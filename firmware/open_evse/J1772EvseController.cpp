@@ -659,7 +659,7 @@ uint8_t J1772EVSEController::ReadACPins()
       ac2 = 0;
     }
   }
-  #if defined (REAL_THREEPHASE) || (THREEPHASE)
+  #if defined (REAL_THREEPHASE) || defined(THREEPHASE)
   while ((ac1 && ac2) &&
   // The original code (below) did not work properly when
   // we try to sample 3 phases systems (ac1=L1 and ac2=L2 or
