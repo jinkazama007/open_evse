@@ -23,8 +23,8 @@
 
 #define OPEN_EVSE
 
-#define ATMEGA328P
-//#define ATMEGA644P
+//#define ATMEGA328P
+#define ATMEGA644P
 
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
@@ -281,7 +281,13 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // I2CLCD_PCF8574
 
 // SSD1306 OLED Display in I2C mode
-#define I2COLED
+// 128x32, 2 lines
+//#define I2COLED 12832
+// 128x64, 4 lines
+//#define I2COLED 12864
+// Rotate screen 180 degrees
+//#define I2COLED_ROTATE
+
 #ifdef I2COLED
 #undef RGBLCD
 #endif

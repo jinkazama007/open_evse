@@ -28,6 +28,7 @@
 #include "Wire.h"
 #include "8x16_pages.h"
 #include <avr/pgmspace.h>
+#include "open_evse.h"
 
 // Fundamental commands.
 #define SSD_CMD_SET_NORMAL_DISPLAY 0xA6
@@ -66,12 +67,25 @@ void SSD1306I2C1602::begin(uint8_t cols, uint8_t rows)
 {
   Wire.begin();
   Wire.beginTransmission(_address);
+  #if defined(I2COLED_ROTATE)
+    Wire.write(0); Wire.write(0x3C); Wire.write(0xA1); Wire.write(0xC8);
+  #endif
   Wire.write(0); Wire.write(SSD_CMD_SET_DISPLAY_OFF);
   Wire.write(0); Wire.write(SSD_CMD_SET_PAGE_START_ADDR | 0x00);
   Wire.write(0); Wire.write(SSD_CMD_SET_HIGHER_COL_START_ADDR | 0b0000);
   Wire.write(0); Wire.write(SSD_CMD_SET_LOWER_COL_START_ADDR | 0b0001);
-  Wire.write(0); Wire.write(SSD_CMD_SET_MULTIPLEX_RATIO); Wire.write(31);
-  Wire.write(0); Wire.write(SSD_CMD_SET_COM_PINS); Wire.write(2);
+  Wire.write(0); Wire.write(SSD_CMD_SET_MULTIPLEX_RATIO);
+  #if defined(I2COLED) && (I2COLED == 12864)
+    Wire.write(63);
+  #else
+    Wire.write(31);
+  #endif
+  Wire.write(0); Wire.write(SSD_CMD_SET_COM_PINS);
+  #if defined(I2COLED) && (I2COLED == 12864)
+    Wire.write(0x12);
+  #else
+    Wire.write(2);
+  #endif  
   Wire.write(0); Wire.write(SSD_CMD_CHARGE_PUMP_SETTING); Wire.write(0x14);
   Wire.endTransmission();
   delay(100); // Wait 100ms.
@@ -84,7 +98,11 @@ void SSD1306I2C1602::begin(uint8_t cols, uint8_t rows)
 // Clear the display.
 void SSD1306I2C1602::clear()
 {
-  for (uint8_t p = 0; p < 4; p++)
+  #if defined(I2COLED) && (I2COLED == 12864)
+    for (uint8_t p = 0; p < 8; p++)
+  #else
+    for (uint8_t p = 0; p < 4; p++)
+  #endif
   {
     Wire.beginTransmission(_address);
     Wire.write(0); Wire.write(SSD_CMD_SET_PAGE_START_ADDR | p);
