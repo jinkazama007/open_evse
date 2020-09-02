@@ -65,5 +65,3 @@ uint8_t AutoCurrentCapacityController::AutoSetCurrentCapacity()
 }
 
 #endif //PP_AUTO_AMPACITY
-
-

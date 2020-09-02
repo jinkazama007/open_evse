@@ -36,7 +36,9 @@
 #include "config/ReceiveOnlyAltSoftSerial_Timers.h"
 #include "open_evse.h"
 
-#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
+#if defined(TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
+#if defined(TELEINFO_SERIAL) && defined(AVR44) && (TELEINFO_SERIAL == 2)
+#endif // TELEINFO_SERIAL
 
 /****************************************/
 /**          Initialization            **/

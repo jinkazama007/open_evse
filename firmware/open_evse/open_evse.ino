@@ -48,11 +48,9 @@
 #include <pins_arduino.h>
 #include "./Wire.h"
 #include "./RTClib.h"
-#include "LibTeleinfo.h"
 #include "open_evse.h"
 #include "ReceiveOnlySoftwareSerial.h"
 #include "ReceiveOnlyAltSoftSerial.h"
-
 // if using I2CLCD_PCF8574 uncomment below line  and comment out LiquidTWI2.h above
 //#include "./LiquidCrystal_I2C.h"
 #ifdef TEMPERATURE_MONITORING
@@ -421,11 +419,17 @@ void OnboardDisplay::Init()
 {
   WDT_RESET();
 
-#ifdef RGBLCD
+#ifdef RGBLCD || defined(RGBLED)
   m_bFlags = 0;
 #else
   m_bFlags = OBDF_MONO_BACKLIGHT;
 #endif // RGBLCD
+
+#ifdef RGBLED
+  pinRGBRedLed.init(RGBLED_RED_REG,RGBLED_RED_IDX,DigitalPin::OUT);
+  pinRGBGreenLed.init(RGBLED_GREEN_REG,RGBLED_GREEN_IDX,DigitalPin::OUT);
+  pinRGBBlueLed.init(RGBLED_BLUE_REG,RGBLED_BLUE_IDX,DigitalPin::OUT);
+#endif
 
 #ifdef GREEN_LED_REG
   pinGreenLed.init(GREEN_LED_REG,GREEN_LED_IDX,DigitalPin::OUT);
@@ -1041,10 +1045,12 @@ void Btn::read()
     }
   }
 #ifdef RAPI_WF
+
   else if (sample && vlongDebounceTime && (buttonState == BTN_STATE_LONG)) {
+    
     if ((millis() - vlongDebounceTime) >= BTN_PRESS_VERYLONG) {
       vlongDebounceTime = 0;
-      RapiSetWifiMode(WIFI_MODE_AP_DEFAULT);
+        RapiSetWifiMode(WIFI_MODE_AP_DEFAULT);
     }
   }
 #endif // RAPI_WF
@@ -2469,71 +2475,292 @@ uint8_t StateTransitionReqFunc(uint8_t curPilotState,uint8_t newPilotState,uint8
 }
 #endif //PP_AUTO_AMPACITY
 
-#if defined (TELEINFO)
-  TInfo tinfo;
-  
-  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1)
-    ReceiveOnlySoftwareSerial SSerial(TELEINFO_SERIAL_PIN);
-  #endif
-  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
-    ReceiveOnlyAltSoftSerial SSerial;
-  #endif
+#if defined(TELEINFO)
+#if defined(TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1)
+ReceiveOnlySoftwareSerial SSerial(TELEINFO_SERIAL_PIN);
+#elif (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
+ReceiveOnlyAltSoftSerial SSerial;
+#endif
+char line[64] = {};
+int8_t charnum = -2;
+byte incomingByte = 0;
+int teleinfo_mode = TELEINFO_MODE;
+bool ProcessFrame = 0;
+#if defined(TELEINFO_OFFLOAD)
+uint8_t tinfo_minchrgcurl1 = TELEINFO_MIN_CHARGING_CURRENT;
+uint8_t tinfo_minchrgcurl2 = TELEINFO_MIN_CHARGING_CURRENT_L2;
+bool tinfo_offload_sleep = 0;
+uint8_t tinfo_maxamp = 0;
+uint8_t tinfo_amp1 = 0;
+uint8_t tinfo_amp2 = 0;
+uint8_t tinfo_amp3 = 0;
+uint8_t tinfo_MaxChargingCurrent = 0;
+uint8_t tinfo_p_MaxChargingCurrent = 0;
+#endif // TELEINFO_OFFLOAD
 
-  int8_t TinfoSubCurrent = -1;
-  int8_t TinfoInstCurrent1 = -1;
-  #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
-  int8_t TinfoInstCurrent2 = -1;
-  int8_t TinfoInstCurrent3 = -1;
-  #endif // THREEPHASE || REAL_THREEPHASE
-  int8_t TinfoRate = -1;
-  int8_t p_TinfoRate = -1;
+#if defined(TELEINFO_NIGHTRATE)
+char tinfo_ptec[5] = {};
+char tinfo_p_ptec[5] = {};
+String tinfo_ptec_allow[] = TELEINFO_NIGHTRATES;
+#endif // TELEINFO_NIGHTRATE
 
-  void TeleinfoDataCallback(ValueList * me, uint8_t flags)
-  {
-    if ((flags & TINFO_FLAGS_ADDED) || (flags & TINFO_FLAGS_UPDATED)) {
-      // Maximum current of the actual subscribed plan
-      if (strcmp(me->name,"ISOUSC") == 0) { TinfoSubCurrent = sscanf(me->value, "%d", &TinfoSubCurrent); }
-      #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
-        // Actual measured current if three phase
-        if (strcmp(me->name,"IINST1") == 0) { TinfoInstCurrent1 = sscanf(me->value, "%d", &TinfoInstCurrent1); }
-        if (strcmp(me->name,"IINST2") == 0) { TinfoInstCurrent2 = sscanf(me->value, "%d", &TinfoInstCurrent2); }
-        if (strcmp(me->name,"IINST3") == 0) { TinfoInstCurrent3 = sscanf(me->value, "%d", &TinfoInstCurrent3); }
-      #else
-        // Actual measured current if single phase
-        if (strcmp(me->name,"IINST") == 0) { TinfoInstCurrent1 = sscanf(me->value, "%d", &TinfoInstCurrent1); }
-      #endif // THREEPHASE || REAL_THREEPHASE
-      // Actual plan price option
-      if (strcmp(me->name,"PTEC") == 0) {
-        p_TinfoRate = TinfoRate;
-        // TH=No option, HC = Night Rate, HN = EJP normal day
-        if ((strcmp(me->value,"TH.." )) || (strcmp(me->value,"HC.." )) || (strcmp(me->value,"HN.." ))) { TinfoRate = 1; }
-        // HP = Day Rate, PM = EJP rush day
-        if ((strcmp(me->value,"HP.." ) == 0) || (strcmp(me->value,"PM.." ))) { TinfoRate = 2; }
-        #if defined (TELEINFO_NIGHTRATE)
-          // Disable/Enable charging if we switch to day rate/night rate.
-          // (Do this only once makes it possible to force Charging/Sleeping with a single press of the button..).
-          if ((TinfoRate == 2) && (p_TinfoRate != 2))
-          if (TELEINFO_NIGHTRATE > 0)
-            g_EvseController.Disable();
-          else
-            g_EvseController.Sleep();
-          if ((TinfoRate == 1) && (p_TinfoRate != 1))
-            g_EvseController.Enable();
-        #endif
-        }
-      #if defined (TELEINFO_OFFLOAD)
-        // Calculate and apply max charging current based on measured currents in meter and evse.
-        if (( TinfoSubCurrent >= 0 ) && ( TinfoInstCurrent1 >= 0 )) {
-          #if defined (THREEPHASE) || defined(REAL_THREEPHASE)
-            uint8_t ChargingCurrent = (TinfoSubCurrent - max(max(TinfoInstCurrent1, TinfoInstCurrent2), TinfoInstCurrent3) - (g_EvseController.GetChargingCurrent() / 1000));
-          #else
-            uint8_t ChargingCurrent = (TinfoSubCurrent - TinfoInstCurrent1 - (g_EvseController.GetChargingCurrent() / 1000));
-          #endif // THREEPHASE || REAL_THREEPHASE
-          g_EvseController.SetCurrentCapacity(ChargingCurrent,1,1);
-      #endif
-      }
+bool tinfo_crc_chk(char* msg, bool mode) {
+// msg: Whole teleinfo line with checksum (without stop & start bytes)
+// mode: 0=Historique, 1=Standard
+// Return 1 for checksum match, 0 for mismatch
+ uint8_t sum = 0;
+ uint8_t crc;
+ while (*msg)
+   sum += *msg++;
+   if (mode == 0 ) { crc = ((sum - msg[strlen(msg) - 1] - msg[strlen(msg) - 2]) & 0x3F) + 0x20; }
+   if (mode == 1 ) { crc = ((sum - msg[strlen(msg) - 1]) & 0x3F) + 0x20; }
+ if ( crc == msg[strlen(msg) - 1]) {
+   return 1;
+ }
+ else {
+   return 0;
+ }
+}
+
+long last_tinfo_detect = -10000;
+bool tinfo_switch_mode = 1;
+
+void tinfo_switch() {
+  if ( tinfo_switch_mode == 0 ) {
+    #if defined TELEINFO_SERIAL && (TELEINFO_SERIAL == 0 )
+    Serial1.end();
+    Serial1.begin(9600);
+    #else
+    SSerial.end();
+    SSerial.begin(9600);
+    #endif
+    tinfo_switch_mode = 1;
+  }
+  else {
+    #if defined TELEINFO_SERIAL && (TELEINFO_SERIAL == 0 )
+    Serial1.end();
+    Serial1.begin(1200);
+    #else
+    SSerial.end();
+    SSerial.begin(1200);
+    #endif
+    tinfo_switch_mode = 0;
+  }
+}
+
+void tinfo_extract_line(char char_line, bool mode) {
+  if ( mode  == 0 )
+    incomingByte = char_line & 0x7F;
+  else
+    incomingByte = char_line;
+  if ( incomingByte == 0x0A ) { charnum = -1; } // Start byte
+  if ( incomingByte == 0x0D ) { line[charnum] = 0x00; ProcessFrame = 1; charnum = -2; }  // End byte
+  if ( charnum >= 0 ) { line[charnum] = incomingByte; charnum++; }
+  if ( charnum > 63 ) { line[0] = 0x00; ProcessFrame = 0; charnum=-2; } // We're droping the line as this should not happen...
+  if ( charnum == -1 ) { charnum++; } // Do not store the frame start byte.
+}
+
+void tinfo_detect_mode(char rxdata) {
+  if (millis() > last_tinfo_detect + 10000) { // Try for 10 seconds
+    tinfo_switch();
+    last_tinfo_detect = millis();
+  }
+  if ( tinfo_switch_mode  == 0 ) {
+    tinfo_extract_line (rxdata, 0);
+    if ( ProcessFrame == 1 ){
+      if (tinfo_crc_chk(line, tinfo_switch_mode)) { teleinfo_mode = 0; }
     }
   }
+  else if ( tinfo_switch_mode  == 1 ) {
+    tinfo_extract_line (rxdata, 1);
+    if ( ProcessFrame == 1 ){
+      if (tinfo_crc_chk(line, tinfo_switch_mode)) { teleinfo_mode = 1; }
+    }
+  }
+  #if defined(TELEINFO_STARTUP_MESSAGE)
+  #if defined(RGBLCD) || defined(I2CLCD) || defined(I2COLED)
+  if ( teleinfo_mode < 2 ) {
+  #if defined(I2COLED) && (I2COLED == 12864)
+    g_OBD.LcdSetCursor(0,2);
+  #else
+    g_OBD.LcdSetCursor(0,0);
+  #endif
+    g_OBD.LcdPrint("Teleinfo Mode:");
+  #if defined(I2COLED) && (I2COLED == 12864)
+    g_OBD.LcdSetCursor(0,3);
+  #else
+    g_OBD.LcdSetCursor(0,1);
+  #endif
+    if ( teleinfo_mode == 0 )
+      g_OBD.LcdPrint("Historique");
+    if ( teleinfo_mode == 1 )
+      g_OBD.LcdPrint("Standard");
+  }
+  #endif // RGBLCD || I2CLCD || I2COLED
+  #endif // TELEINFO_STARTUP_MESSAGE
+}
+
+void tinfo_process(char rxdata) {
+  if ( teleinfo_mode == 2 ) { tinfo_detect_mode(rxdata); }
+  else if ( teleinfo_mode == 1 ) { tinfo_process_standard(rxdata); }
+  else if ( teleinfo_mode == 0 ) { tinfo_process_historique(rxdata); }
+}
+
+void tinfo_process_standard(char rxdata) {
+  /*
+
+      tinfo_extract_line (rxdata, 0);
+    if ( ProcessFrame == 1 ){
+      if (tinfo_crc_chk(line, tinfo_switch_mode)) {
+        char label[17] = {};
+        int i=(sizeof(label)-1); while ( i-- ) if ( line[i] != 0x09 ) { *( label + i ) = *( line + i );} else { label[i] = '\0';}
+        #if defined(TELEINFO_OFFLOAD)
+        if (strcmp(label, "IRMS1") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp1=atoi(amp);
+        }
+        if (strcmp(label, "IRMS2") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp2=atoi(amp);
+        }
+        if (strcmp(label, "IRMS3") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp3=atoi(amp);
+        }
+        if (strcmp(label, "PREF") == 0 ) {
+          char amp[3] = {};
+          int i = 2; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          if ( tinfo_amp3 == 0 ) tinfo_maxamp=(atoi(amp) \* 1000 / 200); // Single-phase
+          else tinfo_maxamp=(atoi(amp) \* 1000 / 200 / 3); // Three-phase
+        }
+        #endif
+        #if defined(TELEINFO_NIGHTRATE)
+        if (strcmp(label, "PTEC") == 0 ) {
+          int i = 4; while ( i-- ) *( tinfo_ptec + i ) = *( line + i + 5 );
+        }
+        #endif
+        */
+}
+
+void tinfo_process_historique(char rxdata) {
+  /*
+    incomingByte = rxdata & 0x7F;
+    if ( incomingByte == 0x0A ) { charnum = -1; } // Start byte
+    if ( incomingByte == 0x0D ) { line[charnum] = 0x00; ProcessFrame = 1; charnum = -2; }  // End byte
+    if ( charnum >= 0 ) { line[charnum] = incomingByte; charnum++; }
+    if ( charnum > 63 ) { line[0] = 0x00; ProcessFrame = 0; charnum=-2; } // We're droping the line as this should not happen...
+    if ( charnum == -1 ) { charnum++; } // Do not store the frame start byte.
+    */
+    tinfo_extract_line (rxdata, 0);
+    if ( ProcessFrame == 1 ){
+      if (tinfo_crc_chk(line, tinfo_switch_mode)) {
+        char label[17] = {};
+        int i=(sizeof(label)-1); while ( i-- ) if ( line[i] != 0x20 ) { *( label + i ) = *( line + i );} else { label[i] = '\0';}
+        #if defined(TELEINFO_OFFLOAD)
+        if (strcmp(label, "IINST") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 6 );
+          tinfo_amp1=atoi(amp);
+        }
+        if (strcmp(label, "IINST1") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp1=atoi(amp);
+        }
+        if (strcmp(label, "IINST2") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp2=atoi(amp);
+        }
+        if (strcmp(label, "IINST3") == 0 ) {
+          char amp[4] = {};
+          int i=3; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_amp3=atoi(amp);
+        }
+        if (strcmp(label, "ISOUSC") == 0 ) {
+          char amp[3] = {};
+          int i = 2; while ( i-- ) *( amp + i ) = *( line + i + 7 );
+          tinfo_maxamp=atoi(amp);
+        }
+        #endif
+        #if defined(TELEINFO_NIGHTRATE)
+        if (strcmp(label, "PTEC") == 0 ) {
+          int i = 4; while ( i-- ) *( tinfo_ptec + i ) = *( line + i + 5 );
+        }
+        #endif
+        #if defined(TELEINFO_OFFLOAD)
+        if ( tinfo_maxamp ) { tinfo_MaxChargingCurrent = (tinfo_maxamp - max(max(tinfo_amp1, tinfo_amp2), tinfo_amp3) - (g_EvseController.GetChargingCurrent() / 1000)); }   
+        if ( tinfo_MaxChargingCurrent != tinfo_p_MaxChargingCurrent ) {
+          if ( tinfo_amp3 == 0 ) { // Single-phase charging
+            if (tinfo_MaxChargingCurrent < tinfo_minchrgcurl1 ) {
+              g_EvseController.SetCurrentCapacity(tinfo_minchrgcurl1,1,1);
+              g_EvseController.Sleep();
+              tinfo_offload_sleep = 1;
+            }
+            else {
+              if ( tinfo_offload_sleep == 1 ) { g_EvseController.Enable(); tinfo_offload_sleep = 0; }
+              g_EvseController.SetCurrentCapacity(tinfo_MaxChargingCurrent,1,1);
+            }
+          }
+          else { // Three-phase charging
+            if (tinfo_MaxChargingCurrent < tinfo_minchrgcurl2 ) {
+              g_EvseController.SetCurrentCapacity(tinfo_minchrgcurl2,1,1);
+              g_EvseController.Sleep();
+              tinfo_offload_sleep = 1;
+            }
+            else {
+              if ( tinfo_offload_sleep == 1 ) { g_EvseController.Enable(); tinfo_offload_sleep = 0; }
+              g_EvseController.SetCurrentCapacity(tinfo_MaxChargingCurrent,1,1);
+            }
+          }
+        }
+        tinfo_p_MaxChargingCurrent = tinfo_MaxChargingCurrent;
+        #endif // TELEINFO_OFFLOAD
+        #if defined(TELEINFO_NIGHTRATE)
+        if (strcmp(tinfo_ptec, tinfo_p_ptec) != 0) {
+          bool ptec_match = 0;
+          int num_of_allowed_ptec=sizeof(tinfo_ptec_allow) / sizeof(tinfo_ptec_allow [0]);
+          for ( int i=0; i<num_of_allowed_ptec; i++ ) {
+            int charlength = sizeof(tinfo_ptec_allow [i]);
+            char ctinfo_ptec_allow[charlength];
+            tinfo_ptec_allow [i].toCharArray(ctinfo_ptec_allow, charlength);
+            if (strcmp(tinfo_ptec, ctinfo_ptec_allow) == 0 ) { ptec_match = 1; }
+          }
+        if ( ptec_match == 1 ) { g_EvseController.Enable(); }
+        else {
+          #if (TELEINFO_NIGHTRATE == 1)
+          g_EvseController.Disable();
+          #else
+          g_EvseController.Sleep();
+          #endif
+          #if defined(TELEINFO_STARTUP_MESSAGE)
+          #if defined(RGBLCD) || defined(I2CLCD) || defined(I2COLED)
+          #if defined(I2COLED) && (I2COLED == 12864)
+          g_OBD.LcdSetCursor(0,2);
+          #else
+          g_OBD.LcdSetCursor(0,0);
+          #endif
+          g_OBD.LcdPrint("Price Plan ");
+          g_OBD.LcdPrint(tinfo_ptec);
+          #if defined(I2COLED) && (I2COLED == 12864)
+          g_OBD.LcdSetCursor(0,3);
+          #else
+          g_OBD.LcdSetCursor(0,1);
+          #endif
+          g_OBD.LcdPrint("Not Allowed");
+          #endif // RGBLCD || I2CLCD || I2COLED
+          #endif // TELEINFO_STARTUP_MESSAGE
+        }
+        strcpy(tinfo_p_ptec, tinfo_ptec);
+      }
+      #endif // TELEINFO_NIGHTRATE
+      ProcessFrame = 0;
+    }
+  }
+}
 #endif // TELEINFO
 
 void setup()
@@ -2558,19 +2785,16 @@ void setup()
   g_TempMonitor.Init();
 #endif
 
-#if defined (TELEINFO)
-  #if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 0)
+#if defined(TELEINFO)
+  #if defined(TELEINFO_SERIAL) && (TELEINFO_SERIAL == 0)
     Serial1.begin(TELEINFO_RATE);
-  #elif defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL >= 1)
+  #elif defined(TELEINFO_SERIAL) && (TELEINFO_SERIAL >= 1)
     SSerial.begin(TELEINFO_RATE);
   #endif
-  tinfo.init();
-  tinfo.attachData(TeleinfoDataCallback);
 #endif // TELEINFO
 
   WDT_ENABLE();
 }  // setup()
-
 
 void loop()
 {
@@ -2605,10 +2829,13 @@ void loop()
 #endif //#ifdef DELAYTIMER
 
 #if defined TELEINFO
-  #if defined TELEINFO_SERIAL && (TELEINFO_SERIAL == 0)
-    if ( Serial1.available() ) { tinfo.process(Serial1.read()); }
-  #elif defined TELEINFO_SERIAL && (TELEINFO_SERIAL >= 1)
-    if ( SSerial.available() ) { tinfo.process(SSerial.read()); }
+  #if defined(TELEINFO_SERIAL) && defined(TELEINFO_SERIAL_PIN) && (TELEINFO_SERIAL != 1)
+    pinMode(TELEINFO_SERIAL_PIN, INPUT_PULLUP); // We don't want the unused software pin (which is connected to the very same pin used here if the jumper is bridged) to disrupt teleinfo trafic.
+  #endif
+  #if defined TELEINFO_SERIAL && (TELEINFO_SERIAL == 0 )
+    while (Serial1.available()) { tinfo_process(Serial1.read()); }
+  #elif defined TELEINFO_SERIAL && (TELEINFO_SERIAL > 0)
+    while ( SSerial.available() ) { tinfo_process(SSerial.read()); }
   #endif // TELEINFO_SERIAL
-#endif // TELEINFO
+  #endif // TELEINFO
 }

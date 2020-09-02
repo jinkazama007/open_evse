@@ -48,5 +48,3 @@ public:
 
 extern EnergyMeter g_EnergyMeter;
 #endif // KWH_RECORDING
-
-

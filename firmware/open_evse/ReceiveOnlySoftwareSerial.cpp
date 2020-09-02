@@ -46,7 +46,7 @@ http://arduiniana.org.
 #include <util/delay_basic.h>
 #include "open_evse.h"
 
-#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1) 
+#if defined(TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1) 
 //
 // Statics
 //

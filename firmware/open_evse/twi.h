@@ -46,4 +46,3 @@
   void twi_releaseBus(void);
 
 #endif
-

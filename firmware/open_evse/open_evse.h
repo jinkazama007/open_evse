@@ -38,6 +38,14 @@
 #include "WProgram.h" // shouldn't need this but arduino sometimes messes up and puts inside an #ifdef
 #endif // ARDUINO
 
+// Support for 44 pins AVR (Atmega1284, 644, 324 (164 does not have enought memory to run open_evse))
+#if defined(__AVR_ATmega164A__) || defined(__AVR_ATmega164P__) || defined(__AVR_ATmega324A__) \
+|| defined(__AVR_ATmega324P__) || defined(__AVR_ATmega324PA__) || defined(__AVR_ATmega324PB__) \
+|| defined(__AVR_ATmega644__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega1284__) \
+|| defined(__AVR_ATmega1284P__)
+#define AVR44
+#endif
+
 #define setBits(flags,bits) (flags |= (bits))
 #define clrBits(flags,bits) (flags &= ~(bits))
 
@@ -55,7 +63,7 @@
 //#define OCPP
 
 // auto detect L1/L2
-#define AUTOSVCLEVEL
+//#define AUTOSVCLEVEL
 
 // show disabled tests before POST
 #define SHOW_DISABLED_TESTS
@@ -65,7 +73,7 @@
 
 // Enable three-phase energy calculation
 // Note: three-phase energy will always be calculated even if EV is only using singe-phase. Ony enable if always charging 3-phase EV and aware of this limitation.
-//#define THREEPHASE
+#define THREEPHASE
 
 // Enable real three-phase current measurements ( 3 current measurements coils are needed )
 //#define REAL_THREEPHASE
@@ -73,49 +81,106 @@
 // Define, in mA, the minimum current measurement difference between two measurements which will trigger an asynchronous RAPI publish event.
 #define AMMETER_CHANGE_PUBLISH 500
 
+// New RGB led using dedicated pins on the MCU, compatible with
+// the new LcdSetBacklightColor; Replaces the obsolete LED pins
+#define RGBLED
+
+#if defined(RGBLED)
+#if defined(AVR44)
+#define RGBLED_RED_REG &PIND
+#define RGBLED_RED_IDX 5
+#define RGBLED_GREEN_REG &PIND
+#define RGBLED_GREEN_IDX 6
+#define RGBLED_BLUE_REG &PIND
+#define RGBLED_BLUE_IDX 7
+#else
+// Not enough free pins on 32 pins AVRs but you can define your owm
+// pins there if you ever disable enough functionality; for now
+// I'm just disabling the standalone RGBLED...
+#undef RGBLED
+#endif
+#endif
+
 // Teleinfo support ( used by French utility energy meters )
 // Allows automatic dynamic configuration of the maximum charge current
-//#define TELEINFO
+#define TELEINFO
 
 #if defined TELEINFO
 // Either historique or standard mode
-// 0 = historique
-// 1 = standard
-#define TELEINFO_MODE 0
+// 0 = Historique
+// 1 = Standard
+// 2 = Autodetect mode
+#define TELEINFO_MODE 2
+
+// Re-enable the EVSE with a very long button press (>10sec).
+// (Replaces the RAPI $WF command).
+#define TELEINFO_OVERRIDE
 
 // Either hard (2nd serial port), soft or altsoft
 // 0 = HardSerial (Serial1)
 // 1 = SoftSerial (SSerial)
 // 2 = AltSoftSerial (SSerial)
-#define TELEINFO_SERIAL 2
+#define TELEINFO_SERIAL 0
 
-// Dynamically adjust current capacity based on teleinfo and ammeter
+#if defined(TELEINFO_SERIAL) && defined(AVR44) && (TELEINFO_SERIAL == 2)
+#undef RGBLED // AltSoftSerial can only use the green led pin on AVR44 boards...
+#endif
+
+// Dynamically adjust current capacity based on TELEINFO and AMMETER
 #define TELEINFO_OFFLOAD
+#define TELEINFO_MIN_CHARGING_CURRENT 13
+#define TELEINFO_MIN_CHARGING_CURRENT_L2 13
 
 // Disable charging when in Day Rate
 // Disable mode:
 // 0 = Sleep mode (can be easily be overriden (by pressing the EVSE
 // button or through the network interface)
 // 1 = Disable mode
-#define TELEINFO_NIGHTRATE 0
+#define TELEINFO_NIGHTRATE 1
 
-#if defined (TELEINFO_MODE) && (TELEINFO_MODE > 0)
-#define TELEINFO_RATE 9600
-#else
+#if defined (TELEINFO_NIGHTRATE)
+/*
+ * If TELEINFO_NIGHTRATE is enabled, Allow charging only with the specified
+ * price plan (Night Rate...)
+ * 
+ * "TH.." // Toutes les Heures                   (Aucune Option)
+ * "HC.." // Heures Creuses                      (Option Heures Creuses)
+ * "HN.." // Heures Normales                     (Option EJP)
+ * "HCJB" // Heures Creuses Jours Bleus          (Option Tempo)
+ * "HCJW" // Heures Creuses Jours Blancs (White) (Option Tempo)
+ * "HCJR" // Heures Creuses Jours Rouges         (Option Tempo)
+ * "HP.." // Heures Pleines                      (Option Heures Creuses)
+ * "PM.." // Heures de Pointe Mobile             (Option EJP)
+ * "HPJB" // Heures Pleines Jours Bleus          (Option Tempo)
+ * "HPJW" // Heures Pleines Jours Blancs (White) (Option Tempo)
+ * "HPJR" // Heures Pleines Jours Rouges         (Option Tempo)
+ */
+#define TELEINFO_NIGHTRATES { "TH..", "HC..", "HN..", "HCJB", "HCJW", "HCJR" }
+#endif
+
+// Display notification at startup if teleinfo is available
+#define TELEINFO_STARTUP_MESSAGE
+
+#if defined(TELEINFO_MODE) && (TELEINFO_MODE == 0)
 #define TELEINFO_RATE 1200
+#else
+#define TELEINFO_RATE 9600
 #endif // TELEINFO_MODE
 
-#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 1)
-#define TELEINFO_SERIAL_PIN 23
-#endif // TELEINFO_SERIAL
-#if defined (TELEINFO_SERIAL) && (TELEINFO_SERIAL == 2)
-#define WIRING
-#endif // TELEINFO_SERIAL
+// Only used by SoftwareSerial (HardSerial & AltSoftSerial are hardcoded)
+// Keep this defined if the teleinfo source is connected to muliple pins
+// on the MCU (for example bridged jumpers...) so we can pull it up.
+#define TELEINFO_SERIAL_PIN 23 
 #endif // TELEINFO
+
+#if ! defined(TELEINFO_OFFLOAD) && ! defined(TELEINFO_NIGHTRATE)
+#undef TELEINFO // What do you need teleinfo for then?
+#endif
+
 
 // charging access control - if defined, enables RAPI G4/S4 commands
 //  to enable/disable charging function
-// if AUTH_LOCK_REG/IDX are also defined (see below), then a hardware pin is
+// if AUTH_LOCK_REG/IDX are also defined(see below), then a hardware pin is
 //  used to control access, rather than RAPI
 // defining AUTH_LOCK enables locking functionality
 // AUTH_LOCK = 1 -> default to locked, automatically lock whenever transition to state A
@@ -134,8 +199,12 @@
 // RAPI over I2C
 //#define RAPI_I2C
 
-// enable sending of RAPI commands
-//#define RAPI_SENDER
+// enable send96ing of RAPI commands
+#define RAPI_SENDER
+
+#if defined(TELEINFO_OVERRIDE)
+#undef RAPI_WF
+#endif
 
 // serial port command line
 // For the RTC version, only CLI or LCD can be defined at one time.
@@ -190,30 +259,28 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // If you loop a wire from the third GFI pin through the CT a few times and then to ground,
 // enable this. ADVPWR must also be defined.
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define GFI_SELFTEST
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 // Board does not have internal GFI hardware, it can't test this functionality!
 // (GFI hardware was removed as it can't detect DC current leak which is now a requirement
 // in EU which means an external device is needed anyway...)
 //#define GFI_SELFTEST
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 // behavior specified by UL
 // 1) if enabled, POST failure will cause a hard fault until power cycled.
 //    disabled, will retry POST continuously until it passes
 // 2) if enabled, any a fault occurs immediately after charge is initiated,
 //    hard fault until power cycled. Otherwise, do the standard delay/retry sequence
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define UL_COMPLIANT
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 // Board does not have internal GFI hardware, it can't test this functionality!
 // (GFI hardware was removed as it can't detect DC current leak which is now a requirement
 // in EU which means an external device is needed anyway...)
 //#define UL_COMPLIANT
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 #ifdef UL_COMPLIANT
 #define ADVPWR
@@ -241,7 +308,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // kWh Recording feature depends upon #AMMETER support
 // comment out KWH_RECORDING to have the elapsed time and time of day displayed on the second line of the LCD
-#define KWH_RECORDING
+//#define KWH_RECORDING
 #ifdef KWH_RECORDING
 // stop charging after a certain kWh reached
 #define CHARGE_LIMIT
@@ -281,9 +348,9 @@ extern AutoCurrentCapacityController g_ACCController;
 // 128x32, 2 lines
 //#define I2COLED 12832
 // 128x64, 4 lines
-//#define I2COLED 12864
+#define I2COLED 12864
 // Rotate screen 180 degrees
-//#define I2COLED_ROTATE
+#define I2COLED_ROTATE
 
 #ifdef I2COLED
 #undef RGBLCD
@@ -316,7 +383,7 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // Option for RTC and DelayTime
 // REQUIRES HARDWARE RTC: DS1307 or DS3231 connected via I2C
-#define RTC // enable RTC & timer functions
+//#define RTC // enable RTC & timer functions
 
 #ifdef RTC
 // Option for Delay Timer - GoldServe
@@ -359,15 +426,13 @@ extern AutoCurrentCapacityController g_ACCController;
 // manual function calls
 // digital pin is configured as input with internal pull-up enabled
 // EVSE is locked when input HIGH and unlocked when input LOW
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 //#define AUTH_LOCK_REG &PINC
 //#define AUTH_LOCK_IDX 2
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 //#define SLEEP_STATUS_REG &PINB
 //#define SLEEP_STATUS_IDX 4
-#endif // __AVR_ATmega644P__
-
+#endif // ! AVR44
 #endif // AUTH_LOCK
 
 
@@ -387,12 +452,11 @@ extern AutoCurrentCapacityController g_ACCController;
 // switch to m_relayHoldPwm
 // ONLY WORKS PWM-CAPABLE PINS!!!
 // use Arduino pin number PD5 = 5, PD6 = 6 (for ATMEGA328)
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 //#define RELAY_AUTO_PWM_PIN 5
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 //#define RELAY_AUTO_PWM_PIN 5
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 // enables RAPI $Z0 for tuning PWM (see rapi_proc.h for $Z0 syntax)
 // PWM parameters written to/loaded from EEPROM
 // when done tuning, put hardcoded parameters into m_relayCloseMs
@@ -417,7 +481,7 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif // RGBLCD || I2CLCD || I2COLED
 
 //If LCD and RTC is defined, un-define CLI so we can save ram space.
-#if defined(SERIALCLI) && defined(DELAYTIMER_MENU)
+#if defined(SERIALCLI) && defined(DELAYTIMER_MENU) && ! defined(AVR44)
 #error INVALID CONFIG - CANNOT enable SERIALCLI with DELAYTIMER_MENU together - too big
 #endif
 
@@ -505,19 +569,19 @@ extern AutoCurrentCapacityController g_ACCController;
 #define DEFAULT_SERVICE_LEVEL 2 // 1=L1, 2=L2
 
 // current capacity in amps
-#define DEFAULT_CURRENT_CAPACITY_L1 12
-#define DEFAULT_CURRENT_CAPACITY_L2 16
+#define DEFAULT_CURRENT_CAPACITY_L1 32
+#define DEFAULT_CURRENT_CAPACITY_L2 32
 
 // minimum allowable current in amps
 #define MIN_CURRENT_CAPACITY_J1772 6
 
 // maximum allowable current in amps
-#define MAX_CURRENT_CAPACITY_L1 16 // J1772 Max for L1 on a 20A circuit = 16, 15A circuit = 12
-#define MAX_CURRENT_CAPACITY_L2 80 // J1772 Max for L2 = 80
+#define MAX_CURRENT_CAPACITY_L1 32 // J1772 Max for L1 on a 20A circuit = 16, 15A circuit = 12
+#define MAX_CURRENT_CAPACITY_L2 32 // J1772 Max for L2 = 80
 
 //J1772EVSEController
 
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define CURRENT_PIN 0 // analog current reading pin ADCx
 #if defined(REAL_THREEPHASE)
 // We're using the two last unused analog pin on the atmeag328p (only available on the QFP version)
@@ -531,21 +595,20 @@ extern AutoCurrentCapacityController g_ACCController;
 // voltmeter pin is ADC2 on OPENEVSE_2
 #define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
 #endif // VOLTMETER
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
-#define CURRENT_PIN 26 // analog current reading pin ADCx
+#else
+#define CURRENT_PIN 2 // analog current reading pin ADCx
 #if defined(REAL_THREEPHASE)
-#define CURRENT_PIN_L2 27 // analog current reading pin ADCx
-#define CURRENT_PIN_L3 28 // analog current reading pin ADCx
+#define CURRENT_PIN_L2 3 // analog current reading pin ADCx
+#define CURRENT_PIN_L3 4 // analog current reading pin ADCx
 #endif // REAL_THREEPHASE
-#define PILOT_PIN 24 // analog pilot voltage reading pin ADCx
-#define PP_PIN 25 // PP_READ - ADC2
+#define PILOT_PIN 0 // analog pilot voltage reading pin ADCx
+#define PP_PIN 1 // PP_READ - ADC2
 #ifdef VOLTMETER
 // N.B. Note, ADC2 is already used as PP_PIN so beware of potential clashes
 // voltmeter pin is ADC2 on OPENEVSE_2
 #define VOLTMETER_PIN 2 // analog AC Line voltage voltmeter pin ADCx
 #endif // VOLTMETER
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 #ifdef OPENEVSE_2
 // This pin must match the last write to CHARGING_PIN, modulo a delay. If
 // it is low when CHARGING_PIN is high, that's a missing ground.
@@ -559,23 +622,22 @@ extern AutoCurrentCapacityController g_ACCController;
 #else // !OPENEVSE_2
 
  // TEST PIN 1 for L1/L2, ground and stuck relay
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define ACLINE1_REG &PIND
 #define ACLINE1_IDX 3
  // TEST PIN 2 for L1/L2, ground and stuck relay
 #define ACLINE2_REG &PIND
 #define ACLINE2_IDX 4
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 #define ACLINE1_REG &PINC
 #define ACLINE1_IDX 3
  // TEST PIN 2 for L1/L2, ground and stuck relay
 #define ACLINE2_REG &PINC
 #define ACLINE2_IDX 4
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 #ifndef RELAY_AUTO_PWM_PIN
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 // digital Relay trigger pin
 #define CHARGING_REG &PINB
 #define CHARGING_IDX 0
@@ -585,12 +647,11 @@ extern AutoCurrentCapacityController g_ACCController;
 //digital Charging pin for AC relay
 #define CHARGINGAC_REG &PINB
 #define CHARGINGAC_IDX 1
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 // digital Relay trigger pin
 #define CHARGING_REG &PINB
 #define CHARGING_IDX 0
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 #endif // !RELAY_AUTO_PWM_PIN
 
 // obsolete LED pin
@@ -603,21 +664,20 @@ extern AutoCurrentCapacityController g_ACCController;
 
 // N.B. if PAFC_PWM is enabled, then pilot pin can be PB1 or PB2
 // if using fast PWM (PAFC_PWM disabled) pilot pin *MUST* be PB2
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define PILOT_REG &PINB
 #define PILOT_IDX 2
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 #define PILOT_REG &PIND
 #define PILOT_IDX 4
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 #ifdef MENNEKES_LOCK
 // requires external 12V H-bridge driver such as Polulu 1451
 #define MENNEKES_LOCK_STATE EVSE_STATE_B // lock in State B
 //#define MENNEKES_LOCK_STATE EVSE_STATE_C // lock in State C
 
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 //D11 - MOSI
 #define MENNEKES_LOCK_PINA_REG &PINB
 #define MENNEKES_LOCK_PINA_IDX 3
@@ -625,14 +685,13 @@ extern AutoCurrentCapacityController g_ACCController;
 //D12 - MISO
 #define MENNEKES_LOCK_PINB_REG &PINB
 #define MENNEKES_LOCK_PINB_IDX 4
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 #define MENNEKES_LOCK_PINA_REG &PINB
 #define MENNEKES_LOCK_PINA_IDX 3
 
 #define MENNEKES_LOCK_PINB_REG &PINB
 #define MENNEKES_LOCK_PINB_IDX 4
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 #include "MennekesLock.h"
 #endif // MENNEKES_LOCK
 
@@ -713,27 +772,25 @@ extern AutoCurrentCapacityController g_ACCController;
 #define AC_SAMPLE_MS 20 // 1 cycle @ 60Hz = 16.6667ms @ 50Hz = 20ms
 
 #ifdef GFI
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define GFI_INTERRUPT 0 // interrupt number 0 = PD2, 1 = PD3
 #define GFI_REG &PIND
 #define GFI_IDX 2
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else)
 #define GFI_INTERRUPT 2 // interrupt number 0 = PD2, 1 = PD3, 2 = PB2
 #define GFI_REG &PINB
 #define GFI_IDX 2
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 #ifdef GFI_SELFTEST
 // pin is supposed to be wrapped around the GFI CT 5+ times
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define GFITEST_REG &PIND
 #define GFITEST_IDX 6
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 #define GFITEST_REG &PINC
 #define GFITEST_IDX 6
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 
 #define GFI_TEST_CYCLES 60
 // GFI pulse should be 50% duty cycle
@@ -784,14 +841,13 @@ extern AutoCurrentCapacityController g_ACCController;
 #endif
 
 // button sensing pin
-#if defined(__AVR_ATmega328P__)
+#if ! defined(AVR44)
 #define BTN_REG &PINC
 #define BTN_IDX 3
-#endif // __AVR_ATmega328P__
-#if defined(__AVR_ATmega644P__)
+#else
 #define BTN_REG &PINC
 #define BTN_IDX 5
-#endif // __AVR_ATmega644P__
+#endif // ! AVR44
 #define BTN_PRESS_SHORT 50  // ms
 #define BTN_PRESS_LONG 500 // ms
 #define BTN_PRESS_VERYLONG 10000
@@ -987,6 +1043,11 @@ class OnboardDisplay
 #ifdef GREEN_LED_REG
   DigitalPin pinGreenLed;
 #endif
+#if defined(RGBLED)
+  DigitalPin pinRGBRedLed;
+  DigitalPin pinRGBGreenLed;
+  DigitalPin pinRGBBlueLed;
+#endif
 #if defined(RGBLCD) || defined(I2CLCD)
 #ifdef I2CLCD_PCF8574
   LiquidCrystal_I2C m_Lcd;
@@ -1086,6 +1147,11 @@ public:
     }
     m_Lcd.setBacklight(c);
 #endif // RGBLCD
+#if defined(RGBLED)
+  if ( c & RED ) { pinRGBRedLed.write(1); } else { pinRGBRedLed.write(0); }
+  if ( c & GREEN ) { pinRGBGreenLed.write(1); } else { pinRGBGreenLed.write(0); }
+  if ( c & BLUE ) { pinRGBBlueLed.write(1); } else { pinRGBBlueLed.write(0); }
+#endif // RGBLED
   }
 #ifdef RGBLCD
   uint8_t readButtons() { return m_Lcd.readButtons(); }

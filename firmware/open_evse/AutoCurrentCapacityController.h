@@ -28,5 +28,3 @@ public:
   uint8_t ReadPPMaxAmps();
   uint8_t AutoSetCurrentCapacity();
 };
-
-

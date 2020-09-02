@@ -157,7 +157,7 @@ void EvseRapiProcessor::sendEvseState()
   writeEnd();
 }
 
-#if defined (REAL_THREEPHASE)
+#if defined(REAL_THREEPHASE)
 void EvseRapiProcessor::sendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3)
 {
 #ifdef RAPI_RESPONSE_CHK
@@ -312,9 +312,11 @@ int EvseRapiProcessor::processCmd()
 	    echo = ((u1.u8 == '0') ? 0 : 1);	      
 	    break;
 #ifdef ADVPWR
+#ifdef GFI
 	  case 'F': // GFI self test
 	    g_EvseController.EnableGfiSelfTest(u1.u8);
 	    break;
+#endif
 	  case 'G': // ground check
 	    g_EvseController.EnableGndChk(u1.u8);
 	    break;
@@ -1026,7 +1028,7 @@ void RapiSendEvseState(uint8_t nodupe)
   }
 }
 
-#if defined (REAL_THREEPHASE)
+#if defined(REAL_THREEPHASE)
 void RapiSendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3)
 {
 #ifdef RAPI_SERIAL

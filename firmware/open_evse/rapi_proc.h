@@ -381,7 +381,7 @@ public:
 
   int doCmd();
   void sendEvseState();
-#if defined (REAL_THREEPHASE)
+#if defined(REAL_THREEPHASE)
   void sendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3);
 #else
   void sendCurrent(uint32_t current);
@@ -434,7 +434,7 @@ extern EvseI2cRapiProcessor g_EIRP;
 void RapiInit();
 void RapiDoCmd();
 void RapiSendEvseState(uint8_t nodupe=1);
-#if defined (REAL_THREEPHASE)
+#if defined(REAL_THREEPHASE)
 void RapiSendCurrent(uint32_t current, uint32_t current_L2, uint32_t current_L3);
 #else
 void RapiSendCurrent(uint32_t current);

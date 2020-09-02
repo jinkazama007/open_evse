@@ -54,6 +54,7 @@ static inline unsigned long ulong_sqrt(unsigned long in)
 
   return out;
 }
+int phase = 1;
 
 void J1772EVSEController::readAmmeter(uint8_t phase)
 {

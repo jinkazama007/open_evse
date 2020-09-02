@@ -98,4 +98,3 @@ void EnergyMeter::SaveTotkWh()
 }
 
 #endif // KWH_RECORDING
-

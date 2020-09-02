@@ -31,7 +31,7 @@ void J1772Pilot::Init()
   ICR1 = TOP;
   // WGM13 -> select P&F mode CS10 -> prescaler = 1
   TCCR1B = _BV(WGM13) | _BV(CS10);
- 
+#if ! defined(AVR44)
 #if (PILOT_IDX == 1) // PB1
   DDRB |= _BV(PORTB1);
   TCCR1A |= _BV(COM1A1);
@@ -39,6 +39,15 @@ void J1772Pilot::Init()
   DDRB |= _BV(PORTB2);
   TCCR1A |= _BV(COM1B1);
 #endif // PILOT_IDX
+#else // AVR44
+#if (PILOT_IDX == 4) // PD4
+  DDRD |= _BV(PORTD4);
+  TCCR1A |= _BV(COM1B1);
+#else // PD5
+  DDRD |= _BV(PORTD5);
+  TCCR1A |= _BV(COM1A1);
+#endif
+#endif // AVR44
 #else // fast PWM
   pin.init(PILOT_REG,PILOT_IDX,DigitalPin::OUT);
 #endif
