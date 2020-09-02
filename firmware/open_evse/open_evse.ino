@@ -127,7 +127,9 @@ Menu *g_SettingsMenuList[] = {
 Menu *g_SetupMenuList[] = {
 #ifdef NOSETUP_MENU
   &g_MaxCurrentMenu,
+#ifdef RTC
   &g_RTCMenu,
+#endif
 #else // !NOSETUP_MENU
 #ifdef DELAYTIMER_MENU
   &g_RTCMenu,
@@ -669,7 +671,9 @@ void OnboardDisplay::Update(int8_t updmode)
       LcdPrint_P(g_psCharging);
 #endif //Adafruit RGB LCD
       // n.b. blue LED is on
+#ifdef AMMETER
       SetAmmeterDirty(1); // force ammeter update code below
+#endif // AMMETER
       break;
     case EVSE_STATE_D: // vent required
       SetGreenLed(0);
@@ -1603,7 +1607,7 @@ void MaxCurrentMenu::Init()
     m_MaxCurrent = MAX_CURRENT_CAPACITY_L1;
   }
   else {
-    m_MaxCurrent = MAX_CURRENT_CAPACITY_L2;
+    m_MaxCurrent = g_EvseController.GetMaxHwCurrentCapacity();
   }
   
   sprintf(g_sTmp,g_sMaxCurrentFmt,(cursvclvl == 1) ? "L1" : "L2");
